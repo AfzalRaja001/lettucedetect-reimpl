@@ -1,0 +1,29 @@
+# All paths below are relative to the repo root. Code must resolve them
+# against the repo root at runtime (pathlib), never against the current
+# working directory - this is what keeps the same config valid on both
+# the dev machine and the RTX 4060 training machine.
+
+paths:
+  raw_data_dir: data/raw
+  processed_data_dir: data/processed
+  checkpoints_dir: checkpoints
+  results_dir: results
+
+model:
+  backbone: answerdotai/ModernBERT-base
+  num_labels: 2
+
+training:
+  optimizer: adamw
+  learning_rate: 1.0e-5
+  weight_decay: 0.01
+  epochs: 6
+  batch_size: 8
+  gradient_accumulation_steps: 1
+  max_seq_length: 2048   # paper uses 4096 on an A100; see docs/project_brief.md Section 5
+  precision: bf16
+  seed: 42
+
+evaluation:
+  metric_for_best_model: token_f1
+  threshold: 0.5
