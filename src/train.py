@@ -159,6 +159,12 @@ def run(config_path: Path = DEFAULT_CONFIG_PATH, smoke_test: bool = False) -> No
         data_collator=collator,
         compute_metrics=compute_token_metrics,
     )
+    print("========== DEVICE INFO ==========")
+    print("CUDA available:", torch.cuda.is_available())
+    print("CUDA device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
+    print("Trainer device:", trainer.args.device)
+    print("Trainer n_gpu:", trainer.args.n_gpu)
+    print("=================================")
     trainer.train()
 
     if not smoke_test:
