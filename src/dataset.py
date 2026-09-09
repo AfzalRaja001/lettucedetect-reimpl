@@ -24,7 +24,9 @@ def load_cached_split(split: str, processed_dir: Path = PROCESSED_DIR) -> Datase
 
     :param split: "train" or "test"
     :param processed_dir: directory containing ragtruth_{split}.jsonl
-    :return: a Hugging Face Dataset exposing input_ids, attention_mask, labels
+    :return: a Hugging Face Dataset exposing input_ids, attention_mask, labels,
+        and task_type (kept for per-task metric breakdowns; Trainer ignores
+        it automatically since it isn't one of the model's forward arguments)
     """
     path = processed_dir / f"ragtruth_{split}.jsonl"
     records = []
@@ -36,6 +38,7 @@ def load_cached_split(split: str, processed_dir: Path = PROCESSED_DIR) -> Datase
                     "input_ids": row["input_ids"],
                     "attention_mask": row["attention_mask"],
                     "labels": row["labels"],
+                    "task_type": row["task_type"],
                 }
             )
     return Dataset.from_list(records)
