@@ -18,8 +18,8 @@ training:
   learning_rate: 1.0e-5
   weight_decay: 0.01
   epochs: 6
-  batch_size: 8
-  gradient_accumulation_steps: 1
+  batch_size: 2
+  gradient_accumulation_steps: 4
   max_seq_length: 2048   # paper uses 4096 on an A100; see docs/project_brief.md Section 5
   precision: bf16
   seed: 42
