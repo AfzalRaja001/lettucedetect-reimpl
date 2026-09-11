@@ -143,6 +143,7 @@ def run(checkpoint_dir: Path = DEFAULT_CHECKPOINT, threshold: float = 0.5) -> di
 
     test_dataset = load_cached_split("test")
     task_types = test_dataset["task_type"]
+    source_ids = test_dataset["source_id"]
 
     trainer = Trainer(
         model=model,
@@ -161,11 +162,27 @@ def run(checkpoint_dir: Path = DEFAULT_CHECKPOINT, threshold: float = 0.5) -> di
     probs_hallucinated = torch.softmax(torch.tensor(logits), dim=-1)[..., 1].numpy()
     preds = (probs_hallucinated >= threshold).astype(int)
 
-    gold_seqs, pred_seqs = [], []
-    for gold_row, pred_row in zip(gold, preds):
+    gold_seqs, pred_seqs, prob_seqs = [], [], []
+    for gold_row, pred_row, prob_row in zip(gold, preds, probs_hallucinated):
         mask = gold_row != -100
         gold_seqs.append(gold_row[mask].tolist())
         pred_seqs.append(pred_row[mask].tolist())
+        prob_seqs.append(prob_row[mask])
+
+    # Dump raw per-token probabilities so every downstream question about
+    # this checkpoint (threshold sweeps, calibration/ECE, per-task analysis)
+    # can be answered offline on any machine, without re-running the model
+    # on a GPU. Only answer-token positions are kept, so this stays small.
+    dump_path = REPO_ROOT / "results" / "test_predictions.npz"
+    dump_path.parent.mkdir(exist_ok=True)
+    np.savez_compressed(
+        dump_path,
+        probs=np.concatenate(prob_seqs).astype(np.float16),
+        golds=np.concatenate([np.array(g, dtype=np.int8) for g in gold_seqs]),
+        lengths=np.array([len(g) for g in gold_seqs], dtype=np.int32),
+        task_types=np.array(task_types),
+        source_ids=np.array([str(s) for s in source_ids]),
+    )
 
     metrics = {}
     metrics.update(example_level_f1(gold_seqs, pred_seqs, group_by=task_types))
