@@ -1,24 +1,7 @@
 """Sweep the decision threshold over saved test predictions - no GPU needed.
 
 The trained model outputs a probability per answer token; turning that into
-a 0/1 decision needs a cutoff, and the paper simply fixes it at 0.5. There
-is no reason 0.5 is optimal: it is optimal only if the costs of a false
-positive and a false negative are equal AND the model's probabilities are
-well calibrated, neither of which is established here.
-
-Honesty problem this script has to solve: if we pick the threshold that
-maximizes F1 on the test set and then report that same F1 as our result,
-the number is no longer a held-out estimate - we fit one parameter to the
-test set and reported the fit. Retraining with a proper validation split
-would solve it, but costs GPU hours.
-
-Since a threshold is applied *after* inference, there is a cheaper fix that
-is just as sound: split the *test set itself* into two halves, grouped by
-source_id so no source document appears in both halves. Tune the threshold
-on half A, report the resulting F1 on half B. Half B was never used to
-choose anything, so its number is honest. We report both that and the full
-sweep curve (which is legitimate as sensitivity analysis, as long as its
-peak is not quoted as "our result").
+a 0/1 decision needs a cutoff, and the paper simply fixes it at 0.5.
 """
 
 import argparse

@@ -1,16 +1,4 @@
 """Sanity-check label alignment by hand before trusting it on the full dataset.
-
-Why this script exists: a bug in tokenize_and_align_labels() (a wrong offset,
-an off-by-one, a misread field) produces a dataset that trains without any
-error - loss goes down, a model comes out the other end - but the labels
-don't actually describe the text, and the resulting F1 numbers are
-meaningless. There is no exception to catch this class of bug; the only way
-to catch it is to look at real examples with your own eyes.
-
-For each hand-picked example, we re-derive what text a labeled token span
-covers using the tokenizer's offset mapping, and print it next to the
-original human-annotated hallucination text from RAGTruth. If those two
-strings don't match, the alignment logic is wrong somewhere upstream.
 """
 
 from transformers import AutoTokenizer
@@ -20,12 +8,6 @@ from data_prep import RAW_DIR, TOKENIZER_NAME, load_raw_ragtruth, tokenize_and_a
 
 def decode_predicted_spans(sample: dict, tokenizer, max_length: int = 2048) -> list[str]:
     """Re-derive the answer substrings that ended up labeled 1, from the tokenized encoding.
-
-    :param sample: one item from load_raw_ragtruth()
-    :param tokenizer: the same tokenizer used to build the cache
-    :param max_length: must match whatever was used when the labels were produced
-    :return: list of answer substrings that our pipeline labeled as hallucinated,
-        with consecutive hallucinated tokens merged into one span
     """
     encoded = tokenize_and_align_labels(sample, tokenizer, max_length)
 

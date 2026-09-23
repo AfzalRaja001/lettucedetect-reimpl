@@ -1,21 +1,12 @@
 """Score a trained checkpoint with the paper's two headline metrics.
 
 Both metrics below work entirely in *token-index* space, not on raw text.
-That's a deliberate simplification, not a shortcut: tokens already cut the
-answer into contiguous, ordered chunks, so merging consecutive
-predicted/gold tokens into "spans" and checking whether two spans overlap
-by token index is equivalent to checking whether they overlap by character
-index - it just doesn't require re-loading the original answer text at
-evaluation time, since the cached labels already are the ground truth in
-that space.
 
 Span-level F1 has no official reference implementation - RAGTruth doesn't
 ship one, and the LettuceDetect paper says it wrote its own. The matching
 rule here (a predicted span counts as correct if it shares at least one
 token with some gold span, and symmetrically for recall) is our own
-documented choice. Don't expect this number to match the paper's exactly;
-do expect it to move in the same direction as real improvements to the
-model.
+documented choice.
 """
 
 import argparse
@@ -99,13 +90,9 @@ def example_level_f1(
 ) -> dict:
     """Collapse each example to one label (any hallucinated token -> 1) and score it.
 
-    This is what the paper reports as its headline number, and what we're
-    comparing against the 76.07 / 79.22 targets.
-
     :param gold_seqs: per-example, per-token gold 0/1 labels
     :param pred_seqs: per-example, per-token predicted 0/1 labels (same shape)
-    :param group_by: optional per-example group key (task_type), to also
-        report per-task F1 the way the paper's Table 2 does
+    :param group_by: optional per-example group key (task_type)
     :return: dict with example_precision/recall/f1, plus by_task_type if given
     """
     gold_example = [int(any(label == 1 for label in seq)) for seq in gold_seqs]
