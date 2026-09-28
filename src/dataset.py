@@ -37,7 +37,7 @@ def load_cached_split(
     -------
     Dataset
         Hugging Face Dataset containing input_ids, attention_mask,
-        labels, and task_type.
+        labels, task_type, source_id, and response_id.
     """
     if split not in VALID_SPLITS:
         raise ValueError(
@@ -74,6 +74,8 @@ def load_cached_split(
                     "attention_mask": row["attention_mask"],
                     "labels": row["labels"],
                     "task_type": row["task_type"],
+                    "source_id": row["source_id"],
+                    "response_id": row["response_id"],
                 }
             )
 
