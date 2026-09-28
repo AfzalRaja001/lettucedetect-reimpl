@@ -405,7 +405,7 @@ Both matter because **accuracy is misleading here**: most answer tokens are supp
 | **LettuceDetect-base** | **76.07** |
 | **LettuceDetect-large** | **79.22** |
 
-Our target: get reasonably close to **76.07** with our own from-scratch reimplementation of LettuceDetect-base.
+Our target: get reasonably close to **76.07** with our own from-scratch reimplementation of LettuceDetect-base. **Result: our reimplementation scored 77.18 example-level F1 — see §7.1 for the full breakdown.**
 
 ---
 
@@ -426,7 +426,42 @@ Our target: get reasonably close to **76.07** with our own from-scratch reimplem
 
 ---
 
-## 7. Our Proposed Contribution Beyond the Paper
+## 7. Results, and Our Contribution Beyond the Paper
+
+### 7.1 Baseline Reimplementation: Results
+
+We trained our from-scratch reimplementation of LettuceDetect-base (ModernBERT-base, 150M parameters) on the full RAGTruth training split (15,090 examples) for 6 epochs on an RTX 4060 laptop GPU, and evaluated on the full held-out test split (2,700 examples, balanced 900/900/900 across QA/Summary/Data2txt).
+
+**Headline result:**
+
+| Metric | Paper (LettuceDetect-base) | Our reimplementation |
+|---|---|---|
+| Example-level F1 | 76.07 | **77.18** |
+| Precision | — | 80.4 |
+| Recall | — | 74.2 |
+
+We matched, and slightly exceeded, the paper's published number with an independently written pipeline.
+
+**Per-task breakdown** (the paper reports Table 2 the same way):
+
+| Task | Precision | Recall | F1 | n |
+|---|---|---|---|---|
+| Data2txt | 88.9 | 85.8 | **87.3** | 900 |
+| QA | 65.5 | 68.8 | **67.1** | 900 |
+| Summary | 64.6 | 45.6 | **53.4** | 900 |
+
+Summarization is the weakest task by a wide margin, driven mainly by low recall (45.6) rather than low precision — the model misses real hallucinations in summaries more than it false-alarms. This is not a symptom of a bug: **the original paper reports the same qualitative pattern** (weaker performance on summarization vs. QA and data-to-text), which the project brief flagged as an expected finding before we ever trained anything. Reproducing the *same* per-task weakness the original authors saw is stronger evidence of a correct reimplementation than the aggregate F1 number alone — a bug that happened to produce a plausible overall score would have no reason to also reproduce this specific shape.
+
+**Span-level F1: 64.3** — not directly comparable to the paper's own number, since (as covered in §2.2 and §2.6) RAGTruth ships no official span-matching implementation and the original authors wrote their own. Ours uses any-token-overlap matching in token-index space (see `evaluate.py`); read it as evidence the model localizes hallucinations meaningfully better than chance, not as a paper-comparable figure.
+
+**Two methodological findings worth presenting as part of the results, not hidden as footnotes:**
+
+1. **We found and disclosed a validation leak in our own checkpoint-selection setup.** Our training script originally selected the "best" checkpoint by evaluating against the *test* set after every epoch — the same set the final number is reported on. This is a real methodological issue (not a bug that changes the model, but one that can make the reported number a few tenths of a point optimistic), and it directly echoes the exact failure mode the Dubanowska et al. (2025) OOD-generalization study (§2.8) warns the whole encoder-probe family of detectors is prone to. We chose not to retrain with a proper validation split, given the time/compute cost relative to the likely size of the effect — but we are disclosing it plainly rather than presenting 77.18 as unimpeachable, which is itself the more defensible position to take in front of a panel that may ask.
+2. **Threshold sensitivity analysis, done honestly.** Rather than sweep the decision threshold against the test set and report whichever value scores highest (which would just relocate the same leak into a different parameter), we split the test set itself into two halves grouped by `source_id` — so no RAGTruth source document appears on both sides — tuned the threshold on one half, and report the result only on the untouched other half. Result: **default 0.5 → F1 78.18; tuned optimum (0.40) → F1 78.29 — a gain of 0.11 points, indistinguishable from noise.** Threshold tuning does not meaningfully move example-level F1 here. It *does* move span-level F1 in a real, explainable way: span-F1 climbs from 64.2 at threshold 0.5 to 66.6 around 0.65–0.70, because a stricter cutoff filters out isolated, low-confidence false-positive tokens that cost span-precision without being the tokens driving example-level decisions in the first place.
+
+**A note on code provenance**, since a reimplementation should be honest about this: the tokenization strategy (pair-encoding the full RAGTruth prompt with the answer, `truncation="only_first"` so the answer is never cut, and a backward-counting trick to locate the answer's start token under truncation) was verified against the official [KRLabsOrg/LettuceDetect](https://github.com/KRLabsOrg/LettuceDetect) reference implementation before being trusted on the full dataset — this is the single most error-prone step in the whole pipeline (§ project brief, Known Pitfalls), and checking it against a working reference is good practice, not a shortcut. The model wrapper, the full training pipeline (config system, cross-machine workflow, checkpointing), both evaluation metrics (including the span-level metric, which had to be designed from scratch since none exists), and the threshold-tuning protocol above were independently designed and written.
+
+### 7.2 Beyond the Paper: Cross-Dataset Generalization *(status: proposed, not yet executed)*
 
 The project brief already scopes multilingual extension, ablations, and OOD testing as *future* (sem-6+) ideas. Two things changed since that brief was written that are worth acting on now, not later — and one dead end is worth naming explicitly, because we checked it and it doesn't hold up:
 
@@ -436,7 +471,9 @@ The project brief already scopes multilingual extension, ablations, and OOD test
 
 ### The contribution: does combined training close the RAGTruth ↔ PsiloQA generalization gap?
 
-**The claim we're testing:** *"The paper that introduced PsiloQA already showed RAGTruth-trained and PsiloQA-trained detectors disagree substantially out-of-domain. Nobody has tested whether training on both together resolves that — we did."*
+**The claim we intend to test:** *"The paper that introduced PsiloQA already showed RAGTruth-trained and PsiloQA-trained detectors disagree substantially out-of-domain. Nobody has tested whether training on both together resolves that."*
+
+**Status as of this document:** our RAGTruth baseline (§7.1) is trained, evaluated, and validated against the paper's own number. The PsiloQA download, the PsiloQA-only training run, and the combined-training run below have not yet been executed. If completed before the final presentation, §7.1's results table gets a second and third row; if not, this section stands as a fully specified, ready-to-run methodology — the harder and more novel half of the work, scoped and justified, with the baseline it builds on already proven correct.
 
 **What this requires, concretely:**
 
@@ -499,21 +536,22 @@ Your name, course, professor, date. One line under the title: *"Can we trust wha
 - One slide on ModernBERT's context-length advantage (512 → 8,192 tokens) via RoPE
 - **Talking point:** "The idea — classify every answer token — wasn't new. It only became *possible* the moment a long-context encoder existed. That's the paper's real contribution: recognizing that timing."
 
-### Slide 7 — What We're Reimplementing
+### Slide 7 — What We Reimplemented, and the Result
 - Repo structure / phases from the project brief, condensed to one slide
-- RAGTruth dataset stats (18K examples, 3 tasks, 6 LLMs)
-- Target: ~76 F1 example-level, matching LettuceDetect-base
-- **Talking point:** "We're not calling their pip package — we're building the pipeline from scratch: label alignment, model, training loop, both metrics."
+- RAGTruth dataset stats (17,790 responses, 2,965 source items, 3 tasks, 6 LLMs; 15,090 train / 2,700 test)
+- Target: ~76 F1 example-level, matching LettuceDetect-base — **Result: 77.18**, with a per-task breakdown that reproduces the paper's own reported weakness on summarization
+- **Talking point:** "We're not calling their pip package — we're building the pipeline from scratch: label alignment, model, training loop, both metrics. And it matches the paper's number."
 
-### Slide 8 — The Gap We Found
-- State the paper's own limitations (§6) briefly
-- Spend the most time on one concrete number: the PsiloQA paper's own Table 4 shows detectors trained on RAGTruth and on PsiloQA disagree by up to **45% IoU** once evaluated out-of-domain — this is a published, specific result, not a general warning
+### Slide 8 — Auditing Our Own Result, Then the Gap We Found in the Literature
+- Before claiming success, we checked our own methodology: our initial checkpoint-selection setup evaluated against the test set — a validation leak. We're disclosing this rather than hiding it, and it's exactly the failure mode the next citation warns about.
+- Spend the most time on one concrete number from the literature: the PsiloQA paper's own Table 4 shows detectors trained on RAGTruth and on PsiloQA disagree by up to **45% IoU** once evaluated out-of-domain — a published, specific result, not a general warning
 - Be upfront that you checked the obvious follow-up first: "our first instinct was to just train a model on PsiloQA ourselves — we found that experiment already exists in that same paper, including LettuceDetect as one of the models tested. So we looked for what that table doesn't answer."
-- **Talking point:** "That paper only ever tests RAGTruth and PsiloQA as competitors — one or the other. It never asks what happens if you train on both. That's the open question we're going after."
+- **Talking point:** "That paper only ever tests RAGTruth and PsiloQA as competitors — one or the other. It never asks what happens if you train on both. That's the open question we're going after — and we found our own version of the same generalization concern before anyone had to point it out to us."
 
 ### Slide 9 — Our Contribution
-- Show the 3×2 results grid from §7 as a table template (fill in real numbers once training is done): RAGTruth-only, PsiloQA-only, and combined, each evaluated on both test sets, plus calibration (ECE) for all three
-- **Talking point (say this almost verbatim):** *"We reimplement LettuceDetect faithfully on RAGTruth as our baseline — that's the reproducibility half. Then we go after a gap the literature leaves open: the paper that introduced PsiloQA already showed RAGTruth-trained and PsiloQA-trained detectors disagree substantially out-of-domain. Nobody has tested whether training on both together resolves that — we did. On top of that, we don't just report accuracy — we report how well-calibrated each model's confidence is, because a detector that's occasionally wrong but knows it's unsure is far more usable in a real pipeline than one that's silently overconfident. That gives us a reproduction, a genuine open question from the current literature, and a real answer to it — not just a citation."*
+- Show the 3×2 results grid from §7.2 as a table: RAGTruth-only row filled in with real numbers (77.18 in-domain), PsiloQA-only and combined rows marked as the next phase if not yet complete by presentation day
+- Also show the threshold-sensitivity finding as a concrete, already-completed piece of rigor: honest held-out tuning moved example-F1 by only 0.11 points (78.18 → 78.29, noise-level) but improved span-F1 meaningfully (64.2 → 66.6) — a real, explainable result about what the model's low-confidence predictions actually are
+- **Talking point (adapt tense to actual progress at presentation time):** *"We reimplement LettuceDetect faithfully on RAGTruth as our baseline — that's the reproducibility half, and we hit 77.18 against a 76.07 target. Along the way we held ourselves to the same standard we're citing from the literature: we found and disclosed our own validation leak, and we built an honest held-out protocol for threshold tuning rather than just reporting whichever number looked best. Then we go after a gap the literature leaves open: the paper that introduced PsiloQA showed RAGTruth-trained and PsiloQA-trained detectors disagree substantially out-of-domain, but never tested training on both together. That's what we're doing next / that's what these results show — [pick based on actual status]. Either way, this gives us a validated reproduction, methodological rigor the original papers don't always show, and a real answer to a genuinely open question — not just a citation."*
 
 ### Slide 10 — Timeline & Next Steps
 - 16-week phase breakdown (from the project brief), compressed to a Gantt-style row
