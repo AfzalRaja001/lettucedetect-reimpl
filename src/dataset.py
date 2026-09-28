@@ -20,21 +20,16 @@ PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 VALID_SPLITS = {"train", "test"}
 
 
-def load_cached_split(
-    split: str,
-    processed_dir: Path = PROCESSED_DIR,
-) -> Dataset:
+def load_cached_split(split: str,processed_dir: Path = PROCESSED_DIR,) -> Dataset:
     """Load one cached RAGTruth split.
 
-    Parameters
-    ----------
+    Parameters:
     split:
         Dataset split to load. Currently "train" or "test".
     processed_dir:
         Directory containing the processed RAGTruth JSONL files.
 
-    Returns
-    -------
+    Returns:
     Dataset
         Hugging Face Dataset containing input_ids, attention_mask,
         labels, task_type, source_id, and response_id.
