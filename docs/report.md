@@ -233,7 +233,19 @@ Full sweep on the complete test set (sensitivity analysis only, not the reported
 | 0.5 (default) | 78.18 |
 | 0.40 (tuned) | 78.29 |
 
-**Finding: threshold tuning does not meaningfully move example-level F1.** The gain (+0.11) is smaller than the noise you'd expect from simply re-measuring the same model on a different random half of the test set. It does, however, **meaningfully improve span-level F1** (64.2 to 66.6 moving from 0.5 to roughly 0.65 to 0.70): a stricter cutoff filters out isolated, low-confidence false-positive tokens that cost span-precision without being the tokens that decide example-level outcomes in the first place. This is a real, explainable, reportable finding, just not the "free F1 point" a naive threshold sweep might have suggested.
+**Finding: a single global threshold does not meaningfully move example-level F1.** The gain (+0.11) is smaller than the noise you'd expect from simply re-measuring the same model on a different random half of the test set. It does, however, **meaningfully improve span-level F1** (64.2 to 66.6 moving from 0.5 to roughly 0.65 to 0.70): a stricter cutoff filters out isolated, low-confidence false-positive tokens that cost span-precision without being the tokens that decide example-level outcomes in the first place. This is a real, explainable, reportable finding, just not the "free F1 point" a naive threshold sweep might have suggested.
+
+**But tuning the threshold separately per task tells a different story.** The global result above averages over all three tasks together, which hides a real, larger effect specific to the weakest one. Repeating the exact same honest held-out protocol (tune on one source-grouped half of that task's examples, report on the other), but stratified by task:
+
+| Task | Held-out F1 @ 0.5 | Held-out F1 @ tuned threshold | Gain |
+|---|---|---|---|
+| **Summary** | 55.2 | **59.6** (threshold 0.40) | **+4.4** |
+| QA | 63.7 | 65.4 (threshold 0.45) | +1.7 |
+| Data2txt | 86.9 | 87.1 (threshold 0.40) | +0.2 |
+
+Summarization, our weakest task (section 6.2), gets by far the largest gain: +4.4 F1 points, for zero additional training. This makes sense once its own token composition is examined: hallucinated tokens make up only **3.0%** of Summary's answer tokens, against **8.0%** for QA and **4.8%** for Data2txt, the sparsest positive-class signal of the three tasks. A model trained under that scarcity tends to play conservative and only flag what it's very confident about, which is exactly the high-precision (64.6), low-recall (45.6) pattern reported in section 6.2. A lower, task-specific threshold directly compensates for that conservatism. We also checked and ruled out a competing hypothesis before proposing this: Summary examples are not disproportionately truncated by the 2,048-token cap (only 2.5% hit the limit, average length 868 tokens), so context loss is not the driver.
+
+Deploying a per-task threshold is practical, not just a reporting trick: the task type is known at inference time in a real RAG pipeline, so applying a different cutoff per task is a normal, legitimate engineering choice, not something that requires guessing which task an answer belongs to.
 
 ### 6.5 Methodological Integrity Findings
 
@@ -253,6 +265,7 @@ Two things we found by auditing our own process, not by anyone external flagging
 - **Checking a "novel idea" against the literature before committing to it.** Realizing the PsiloQA paper's own Table 4 had already run the "train on PsiloQA, compare to RAGTruth" experiment, including testing LettuceDetect itself, saved us from presenting a repeated experiment as an original contribution, and pointed at a genuinely unaddressed question instead (combined training).
 - **An honest held-out protocol for threshold tuning**, rather than reporting whichever cutoff scored highest on test.
 - **Dumping raw predictions once**, so every subsequent question about the trained model (threshold sweeps, this report's tables, future calibration work) could be answered without going back to the GPU.
+- **Stratifying the threshold analysis by task instead of stopping at the global average.** This surfaced a real +4.4 F1 gain on our weakest task (Summarization, section 6.4) that the global number had hidden, for no additional training cost.
 
 ## 8. What Didn't Work / Challenges Encountered
 
@@ -285,6 +298,7 @@ Two things we found by auditing our own process, not by anyone external flagging
 Directly continuing the plan in the project brief and the literature survey:
 
 - **Immediate next step:** execute the combined-training study (section 7.2 of the literature survey). Train on RAGTruth, on PsiloQA-English, and on both combined; evaluate each configuration on both test sets; report calibration (Expected Calibration Error) alongside F1 for all three.
+- **Class-weighted retraining, targeted specifically at Summarization's recall gap.** The per-task threshold result (section 6.4) is a free, already-realized gain, but it only compensates after the fact for a model that was trained under a scarce positive-class signal (3.0% of Summary's answer tokens are hallucinated, against 8.0% for QA). Reweighting the loss to penalize missed hallucinated tokens more heavily during training targets that scarcity at its source rather than adjusting for it afterward, and could plausibly lift Summary's recall (and F1) further than thresholding alone. This is a genuine "planned, not yet executed" item: it requires a real retrain, and unlike the threshold result above, we are not claiming it will work until it has actually been run.
 
 
 ## 12. References
