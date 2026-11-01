@@ -1,0 +1,117 @@
+{
+  "length_stats": {
+    "train/ALL": {
+      "n": 15090,
+      "mean": 802.7727634194831,
+      "p95": 1453.0,
+      "max": 2632,
+      "pct_over_2048": 0.8614976805831678,
+      "pct_over_4096": 0.0
+    },
+    "train/Data2txt": {
+      "n": 5298,
+      "mean": 983.8078520196301,
+      "p95": 1379.0,
+      "max": 2328,
+      "pct_over_2048": 0.11325028312570783,
+      "pct_over_4096": 0.0
+    },
+    "train/QA": {
+      "n": 5034,
+      "mean": 541.6307111640842,
+      "p95": 800.0,
+      "max": 1061,
+      "pct_over_2048": 0.0,
+      "pct_over_4096": 0.0
+    },
+    "train/Summary": {
+      "n": 4758,
+      "mean": 877.4817150063052,
+      "p95": 1805.1499999999996,
+      "max": 2632,
+      "pct_over_2048": 2.606137032366541,
+      "pct_over_4096": 0.0
+    },
+    "test/ALL": {
+      "n": 2700,
+      "mean": 792.6333333333333,
+      "p95": 1464.0999999999995,
+      "max": 2402,
+      "pct_over_2048": 0.7037037037037037,
+      "pct_over_4096": 0.0
+    },
+    "test/Data2txt": {
+      "n": 900,
+      "mean": 994.7555555555556,
+      "p95": 1435.05,
+      "max": 1879,
+      "pct_over_2048": 0.0,
+      "pct_over_4096": 0.0
+    },
+    "test/QA": {
+      "n": 900,
+      "mean": 531.2077777777778,
+      "p95": 759.05,
+      "max": 1072,
+      "pct_over_2048": 0.0,
+      "pct_over_4096": 0.0
+    },
+    "test/Summary": {
+      "n": 900,
+      "mean": 851.9366666666666,
+      "p95": 1695.05,
+      "max": 2402,
+      "pct_over_2048": 2.111111111111111,
+      "pct_over_4096": 0.0
+    }
+  },
+  "test_scores": {
+    "all": {
+      "n": 2700,
+      "gold_positive": 943,
+      "f1": 77.17750826901874
+    },
+    "not truncated": {
+      "n": 2681,
+      "gold_positive": 938,
+      "f1": 77.27272727272727
+    },
+    "truncated": {
+      "n": 19,
+      "gold_positive": 5,
+      "f1": 60.0
+    },
+    "Data2txt (all)": {
+      "n": 900,
+      "gold_positive": 579,
+      "f1": 87.34622144112478
+    },
+    "Data2txt truncated": {
+      "n": 0,
+      "gold_positive": 0,
+      "f1": NaN
+    },
+    "QA (all)": {
+      "n": 900,
+      "gold_positive": 160,
+      "f1": 67.07317073170732
+    },
+    "QA truncated": {
+      "n": 0,
+      "gold_positive": 0,
+      "f1": NaN
+    },
+    "Summary (all)": {
+      "n": 900,
+      "gold_positive": 204,
+      "f1": 53.44827586206897
+    },
+    "Summary truncated": {
+      "n": 19,
+      "gold_positive": 5,
+      "f1": 60.0
+    }
+  },
+  "overall_f1": 77.17750826901874,
+  "upper_bound_f1_if_truncated_perfect": 77.39801543550165
+}

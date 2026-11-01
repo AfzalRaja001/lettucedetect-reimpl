@@ -15,7 +15,10 @@ For each response we create one example containing:
 Only answer tokens receive 0/1 labels. Context and special tokens are
 assigned -100 so that they do not contribute to the training loss."""
 
+import argparse
+import hashlib
 import json
+import random
 from pathlib import Path
 
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
@@ -24,6 +27,25 @@ from transformers import AutoTokenizer, PreTrainedTokenizerBase
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RAW_DIR = REPO_ROOT / "data" / "raw"
 PROCESSED_DIR = REPO_ROOT / "data" / "processed"
+PSILOQA_DIR = RAW_DIR / "psiloqa"
+
+PSILOQA_HF_ID = "s-nlp/PsiloQA"
+PSILOQA_LANGUAGE = "en"
+# PsiloQA calls its dev split "validation"; the caches use the short name "val".
+PSILOQA_SPLITS = {"train": "train", "validation": "val", "test": "test"}
+
+# Mirrors the RAGTruth QA prompt, so PsiloQA examples look like the QA examples
+# the model already sees, instead of introducing a second input format.
+PSILOQA_PROMPT = (
+    "Briefly answer the following question:\n{question}\n"
+    "Bear in mind that your response should be strictly based on the following passage:\n"
+    "passage 1:{passage}\n\n"
+    "In case the passage does not contain the necessary information to answer "
+    'the question, please reply with: "Unable to answer based on given passages."\n'
+    "output:"
+)
+
+VAL_SEED = 42
 
 TOKENIZER_NAME = "answerdotai/ModernBERT-base"
 DEFAULT_MAX_LENGTH = 2048
@@ -202,10 +224,58 @@ def tokenize_and_align_labels(
     return encoding
 
 
+def encode_record(
+    sample: dict,
+    tokenizer: PreTrainedTokenizerBase,
+    max_length: int,
+) -> dict:
+    """Tokenize one sample into the record format stored in the processed caches."""
+    encoded = tokenize_and_align_labels(sample, tokenizer, max_length)
+
+    return {
+        "input_ids": encoded["input_ids"],
+        "attention_mask": encoded["attention_mask"],
+        "labels": encoded["labels"],
+        "task_type": sample["task_type"],
+        "source_id": sample["source_id"],
+        "response_id": sample["response_id"],
+    }
+
+
+def write_split(records: list[dict], output_path: Path) -> None:
+    """Write one cached split as JSONL and report its size."""
+    with open(output_path, "w", encoding="utf-8") as f:
+        for record in records:
+            f.write(json.dumps(record) + "\n")
+
+    print(f"Wrote {len(records)} examples to {output_path}")
+
+
+def split_train_val_by_source(
+    train_samples: list[dict],
+    val_fraction: float,
+    seed: int = VAL_SEED,
+) -> tuple[list[dict], list[dict]]:
+    """Hold out whole source documents for validation.
+
+    RAGTruth has about six responses per source item, all sharing one
+    context. Splitting per response would put the same context on both sides
+    and make validation scores optimistic, so the split is per source_id.
+    """
+    source_ids = sorted({s["source_id"] for s in train_samples})
+    random.Random(seed).shuffle(source_ids)
+    val_sources = set(source_ids[: int(len(source_ids) * val_fraction)])
+
+    train = [s for s in train_samples if s["source_id"] not in val_sources]
+    val = [s for s in train_samples if s["source_id"] in val_sources]
+    return train, val
+
+
 def build_and_cache(
     raw_dir: Path = RAW_DIR,
     processed_dir: Path = PROCESSED_DIR,
     max_length: int = DEFAULT_MAX_LENGTH,
+    val_fraction: float = 0.0,
 ) -> None:
     """Tokenize RAGTruth and save one processed file for each split.
 
@@ -217,6 +287,9 @@ def build_and_cache(
         Directory where processed JSONL files will be written.
     max_length:
         Maximum sequence length passed to the tokenizer.
+    val_fraction:
+        Share of the official train split's source documents to hold out as
+        a validation split. 0 keeps the original train/test-only layout.
     """
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_NAME)
     samples = load_raw_ragtruth(raw_dir)
@@ -227,21 +300,6 @@ def build_and_cache(
     }
 
     for sample in samples:
-        encoded = tokenize_and_align_labels(
-            sample,
-            tokenizer,
-            max_length,
-        )
-
-        record = {
-            "input_ids": encoded["input_ids"],
-            "attention_mask": encoded["attention_mask"],
-            "labels": encoded["labels"],
-            "task_type": sample["task_type"],
-            "source_id": sample["source_id"],
-            "response_id": sample["response_id"],
-        }
-
         split = sample["split"]
 
         if split not in by_split:
@@ -250,19 +308,125 @@ def build_and_cache(
                 f"Expected one of: {sorted(by_split)}"
             )
 
-        by_split[split].append(record)
+        by_split[split].append(sample)
+
+    if val_fraction > 0:
+        by_split["train"], by_split["val"] = split_train_val_by_source(
+            by_split["train"], val_fraction
+        )
 
     processed_dir.mkdir(parents=True, exist_ok=True)
 
-    for split, records in by_split.items():
-        output_path = processed_dir / f"ragtruth_{split}.jsonl"
+    for split, split_samples in by_split.items():
+        records = [encode_record(s, tokenizer, max_length) for s in split_samples]
+        write_split(records, processed_dir / f"ragtruth_{split}.jsonl")
+
+
+def download_psiloqa(raw_dir: Path = PSILOQA_DIR, language: str = PSILOQA_LANGUAGE) -> None:
+    """Download PsiloQA from the Hugging Face Hub and keep one language as JSONL.
+
+    ModernBERT-base is an English model, so only English rows are kept.
+    Fields the pipeline does not use (golden answer, URLs, complexity) are dropped.
+    """
+    from datasets import load_dataset
+
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    dataset = load_dataset(PSILOQA_HF_ID)
+
+    keep = ["id", "wiki_title", "llm_checkpoint", "wiki_passage", "question", "llm_answer", "labels"]
+
+    for hf_split in PSILOQA_SPLITS:
+        rows = [r for r in dataset[hf_split] if r["lang"] == language]
+        output_path = raw_dir / f"{hf_split}.jsonl"
 
         with open(output_path, "w", encoding="utf-8") as f:
-            for record in records:
-                f.write(json.dumps(record) + "\n")
+            for row in rows:
+                f.write(json.dumps({k: row[k] for k in keep}) + "\n")
 
-        print(f"Wrote {len(records)} examples to {output_path}")
+        print(f"Wrote {len(rows)} '{language}' rows to {output_path}")
+
+
+def load_raw_psiloqa(split: str, raw_dir: Path = PSILOQA_DIR) -> list[dict]:
+    """Load one PsiloQA split as samples in the same shape load_raw_ragtruth returns.
+
+    PsiloQA stores the passage, question, and the model's answer separately.
+    The passage and question are rebuilt into a RAGTruth-style QA prompt, and
+    the character spans are already relative to the answer text.
+
+    ``source_id`` is a hash of the Wikipedia passage, so that threshold
+    tuning and validation splits can group examples by passage, the same way
+    RAGTruth is grouped by source document.
+    """
+    if split not in PSILOQA_SPLITS:
+        raise ValueError(f"Unknown PsiloQA split '{split}'. Expected one of: {sorted(PSILOQA_SPLITS)}")
+
+    samples = []
+    skipped_empty = 0
+
+    with open(raw_dir / f"{split}.jsonl", encoding="utf-8") as f:
+        for line in f:
+            row = json.loads(line)
+
+            if not row["llm_answer"].strip():
+                skipped_empty += 1
+                continue
+
+            samples.append(
+                {
+                    "context": PSILOQA_PROMPT.format(
+                        question=row["question"], passage=row["wiki_passage"]
+                    ),
+                    "answer": row["llm_answer"],
+                    "spans": [
+                        {"start": start, "end": end, "category": "HAL"}
+                        for start, end in row["labels"]
+                    ],
+                    "task_type": "PsiloQA",
+                    "model": row["llm_checkpoint"],
+                    "split": PSILOQA_SPLITS[split],
+                    "source_id": hashlib.sha1(row["wiki_passage"].encode("utf-8")).hexdigest()[:12],
+                    "response_id": row["id"],
+                }
+            )
+
+    if skipped_empty:
+        print(f"Skipped {skipped_empty} PsiloQA rows with an empty answer in '{split}'")
+
+    return samples
+
+
+def build_and_cache_psiloqa(
+    raw_dir: Path = PSILOQA_DIR,
+    processed_dir: Path = PROCESSED_DIR,
+    max_length: int = DEFAULT_MAX_LENGTH,
+) -> None:
+    """Tokenize PsiloQA and save psiloqa_{train,val,test}.jsonl."""
+    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_NAME)
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
+    for hf_split, cache_split in PSILOQA_SPLITS.items():
+        samples = load_raw_psiloqa(hf_split, raw_dir)
+        records = [encode_record(s, tokenizer, max_length) for s in samples]
+        write_split(records, processed_dir / f"psiloqa_{cache_split}.jsonl")
 
 
 if __name__ == "__main__":
-    build_and_cache()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", choices=["ragtruth", "psiloqa", "both"], default="ragtruth")
+    parser.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
+    parser.add_argument(
+        "--val-fraction",
+        type=float,
+        default=0.0,
+        help="RAGTruth only: share of train source documents held out as a validation split",
+    )
+    parser.add_argument("--download", action="store_true", help="PsiloQA only: fetch the raw data first")
+    args = parser.parse_args()
+
+    if args.dataset in ("ragtruth", "both"):
+        build_and_cache(max_length=args.max_length, val_fraction=args.val_fraction)
+
+    if args.dataset in ("psiloqa", "both"):
+        if args.download or not (PSILOQA_DIR / "train.jsonl").exists():
+            download_psiloqa()
+        build_and_cache_psiloqa(max_length=args.max_length)

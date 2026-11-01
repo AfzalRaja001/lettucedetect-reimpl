@@ -17,21 +17,25 @@ from datasets import Dataset
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 
-VALID_SPLITS = {"train", "test"}
+VALID_SPLITS = {"train", "val", "test"}
+VALID_DATASETS = {"ragtruth", "psiloqa"}
 
 
 def load_cached_split(
     split: str,
     processed_dir: Path = PROCESSED_DIR,
+    dataset: str = "ragtruth",
 ) -> Dataset:
-    """Load one cached RAGTruth split.
+    """Load one cached split of one dataset.
 
     Parameters
     ----------
     split:
-        Dataset split to load. Currently "train" or "test".
+        Dataset split to load: "train", "val", or "test".
     processed_dir:
-        Directory containing the processed RAGTruth JSONL files.
+        Directory containing the processed JSONL files.
+    dataset:
+        "ragtruth" or "psiloqa".
 
     Returns
     -------
@@ -45,7 +49,19 @@ def load_cached_split(
             f"Expected one of: {sorted(VALID_SPLITS)}"
         )
 
-    cache_path = processed_dir / f"ragtruth_{split}.jsonl"
+    if dataset not in VALID_DATASETS:
+        raise ValueError(
+            f"Unsupported dataset '{dataset}'. "
+            f"Expected one of: {sorted(VALID_DATASETS)}"
+        )
+
+    cache_path = processed_dir / f"{dataset}_{split}.jsonl"
+
+    if not cache_path.exists():
+        raise FileNotFoundError(
+            f"{cache_path} does not exist. Build it with data_prep.py "
+            f"(RAGTruth validation needs --val-fraction 0.1)."
+        )
 
     records = []
 

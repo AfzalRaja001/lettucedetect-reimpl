@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import yaml
+from datasets import concatenate_datasets
 from sklearn.metrics import f1_score, precision_score, recall_score
 from transformers import (
     AutoTokenizer,
@@ -26,6 +27,12 @@ from model import MODEL_NAME, build_model
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "base_config.yaml"
+
+TRAIN_SOURCES = {
+    "ragtruth": ["ragtruth"],
+    "psiloqa": ["psiloqa"],
+    "both": ["ragtruth", "psiloqa"],
+}
 
 
 def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> dict:
@@ -116,39 +123,59 @@ def build_training_arguments(config: dict, output_dir: Path, smoke_test: bool) -
         eval_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
+        save_total_limit=2,
         metric_for_best_model=config["evaluation"]["metric_for_best_model"],
         seed=training["seed"],
         report_to=[],
     )
 
 
-def run(config_path: Path = DEFAULT_CONFIG_PATH, smoke_test: bool = False) -> None:
+def load_combined_split(split: str, datasets: list[str], processed_dir: Path):
+    """Load one split from every named dataset and concatenate them."""
+    parts = [load_cached_split(split, processed_dir, dataset=name) for name in datasets]
+    return parts[0] if len(parts) == 1 else concatenate_datasets(parts)
+
+
+def run(
+    config_path: Path = DEFAULT_CONFIG_PATH,
+    smoke_test: bool = False,
+    train_on: str = "ragtruth",
+    run_name: str | None = None,
+) -> None:
     """Load data and model per the config, then fine-tune.
+
+    Checkpoints are selected on a validation split, never on the test split.
 
     :param config_path: path to a YAML config file
     :param smoke_test: if True, train on a small slice of real data for one
         fast epoch, to catch runtime bugs (shape mismatches, bad field
         names) before committing to a real multi-hour run on the GPU machine
+    :param train_on: "ragtruth", "psiloqa", or "both"
+    :param run_name: checkpoint folder name under checkpoints/; defaults to train_on
     """
     config = load_config(config_path)
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model = build_model(MODEL_NAME)
 
-    train_dataset = load_cached_split("train", config["paths"]["processed_data_dir"])
-    eval_dataset = load_cached_split("test", config["paths"]["processed_data_dir"])
+    datasets = TRAIN_SOURCES[train_on]
+    processed_dir = config["paths"]["processed_data_dir"]
+    train_dataset = load_combined_split("train", datasets, processed_dir)
+    eval_dataset = load_combined_split("val", datasets, processed_dir)
+    print(f"Training on {datasets}: {len(train_dataset)} train / {len(eval_dataset)} val examples")
 
     if smoke_test:
         # Sort by length and take the shortest examples, so the smoke test
-        # stays fast on a CPU-only dev machine. This is still real RAGTruth
-        # data, not synthetic - only the *selection* of examples is biased
-        # toward short ones, purely to keep runtime down.
+        # stays fast on a CPU-only dev machine. This is still real data, not
+        # synthetic - only the *selection* of examples is biased toward short
+        # ones, purely to keep runtime down.
         train_dataset = train_dataset.map(lambda ex: {"length": len(ex["input_ids"])})
         train_dataset = train_dataset.sort("length").select(range(20)).remove_columns("length")
         eval_dataset = eval_dataset.map(lambda ex: {"length": len(ex["input_ids"])})
         eval_dataset = eval_dataset.sort("length").select(range(10)).remove_columns("length")
 
     collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
-    output_dir = config["paths"]["checkpoints_dir"] / ("smoke_test" if smoke_test else "run")
+    name = run_name or train_on
+    output_dir = config["paths"]["checkpoints_dir"] / (f"smoke_test_{name}" if smoke_test else name)
     training_args = build_training_arguments(config, output_dir, smoke_test)
 
     trainer = Trainer(
@@ -176,6 +203,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--smoke-test", action="store_true")
+    parser.add_argument("--train-on", choices=sorted(TRAIN_SOURCES), default="ragtruth")
+    parser.add_argument("--run-name", default=None, help="checkpoint folder name; defaults to --train-on")
     args = parser.parse_args()
 
-    run(config_path=args.config, smoke_test=args.smoke_test)
+    run(
+        config_path=args.config,
+        smoke_test=args.smoke_test,
+        train_on=args.train_on,
+        run_name=args.run_name,
+    )

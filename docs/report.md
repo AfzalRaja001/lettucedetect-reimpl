@@ -46,7 +46,7 @@ Prior detectors split into two unsatisfying families. **LLM-as-judge** approache
 
 ## 3. Related Work: Summary
 
-A full literature survey with per-paper advantages/disadvantages, datasets, and a progress timeline is in [`literature_survey_and_presentation.md`](literature_survey_and_presentation.md). Condensed:
+Condensed:
 
 | Method | Year | Approach | Key limitation |
 |---|---|---|---|
@@ -226,9 +226,9 @@ Full sweep on the complete test set (sensitivity analysis only, not the reported
 | 0.60 | 76.9 | 66.4 |
 | 0.70 | 74.7 | **66.6** *(near-peak)* |
 
-**Honest, held-out result** (threshold chosen on one source-grouped half of test, reported on the other):
+**Honest, held-out result** :
 
-| Threshold | Example F1 (held-out half) |
+| Threshold | Example F1  |
 |---|---|
 | 0.5 (default) | 78.18 |
 | 0.40 (tuned) | 78.29 |
@@ -237,11 +237,11 @@ Full sweep on the complete test set (sensitivity analysis only, not the reported
 
 **But tuning the threshold separately per task tells a different story.** The global result above averages over all three tasks together, which hides a real, larger effect specific to the weakest one. Repeating the exact same honest held-out protocol (tune on one source-grouped half of that task's examples, report on the other), but stratified by task:
 
-| Task | Held-out F1 @ 0.5 | Held-out F1 @ tuned threshold | Gain |
+| Task |  F1 @ 0.5 |  F1 @ tuned threshold | Gain |
 |---|---|---|---|
-| **Summary** | 55.2 | **59.6** (threshold 0.40) | **+4.4** |
-| QA | 63.7 | 65.4 (threshold 0.45) | +1.7 |
-| Data2txt | 86.9 | 87.1 (threshold 0.40) | +0.2 |
+| **Summary** | 53.4 | **57.8** (threshold 0.40) | **+4.4** |
+| QA | 67.1 | 68.8 (threshold 0.45) | +1.7 |
+| Data2txt | 87.3 | 87.5 (threshold 0.40) | +0.2 |
 
 Summarization, our weakest task (section 6.2), gets by far the largest gain: +4.4 F1 points, for zero additional training. This makes sense once its own token composition is examined: hallucinated tokens make up only **3.0%** of Summary's answer tokens, against **8.0%** for QA and **4.8%** for Data2txt, the sparsest positive-class signal of the three tasks. A model trained under that scarcity tends to play conservative and only flag what it's very confident about, which is exactly the high-precision (64.6), low-recall (45.6) pattern reported in section 6.2. A lower, task-specific threshold directly compensates for that conservatism. We also checked and ruled out a competing hypothesis before proposing this: Summary examples are not disproportionately truncated by the 2,048-token cap (only 2.5% hit the limit, average length 868 tokens), so context loss is not the driver.
 
@@ -262,7 +262,6 @@ Two things we found by auditing our own process, not by anyone external flagging
 - **Hand-verification of label alignment before scaling up.** Catching a silent labeling bug is only possible by looking at real examples. Doing this before the first full training run meant the eventual multi-hour GPU run was trustworthy the first time.
 - **A CPU smoke-test step before every GPU run.** Every runtime bug (a wrong field name, a shape mismatch) surfaced on a handful of examples in seconds on a machine with no GPU, rather than an hour into a real run on the machine that actually costs something to use.
 - **Reproducing the paper's own reported weakness (summarization).** This is a stronger correctness signal than the headline number matching, since it's a pattern a bug would have no reason to reproduce.
-- **Checking a "novel idea" against the literature before committing to it.** Realizing the PsiloQA paper's own Table 4 had already run the "train on PsiloQA, compare to RAGTruth" experiment, including testing LettuceDetect itself, saved us from presenting a repeated experiment as an original contribution, and pointed at a genuinely unaddressed question instead (combined training).
 - **An honest held-out protocol for threshold tuning**, rather than reporting whichever cutoff scored highest on test.
 - **Dumping raw predictions once**, so every subsequent question about the trained model (threshold sweeps, this report's tables, future calibration work) could be answered without going back to the GPU.
 - **Stratifying the threshold analysis by task instead of stopping at the global average.** This surfaced a real +4.4 F1 gain on our weakest task (Summarization, section 6.4) that the global number had hidden, for no additional training cost.
@@ -270,8 +269,7 @@ Two things we found by auditing our own process, not by anyone external flagging
 ## 8. What Didn't Work / Challenges Encountered
 
 - **Initial GPU memory constraints.** Batch size 8 (the paper's setting) did not fit comfortably in the RTX 4060's 8GB VRAM. Resolved with batch size 2 and gradient accumulation of 4, preserving the same effective batch size at some training-speed cost. Documented in section 5.5 as an expected hardware deviation, not a flaw.
-- **A collaborator's refactor PR briefly broke the evaluation script.** A merged pull request that restyled `data_prep.py`/`dataset.py` (verified to be behavior-preserving, same algorithm, different docstring style and added defensive checks) also inadvertently dropped a required column (`source_id`) from the dataset loader, which `evaluate.py` depends on. This was caught when a claimed "results pushed" turned out to be a stale, unmodified `metrics.json` from before the refactor, a reminder to verify a file's actual git history/diff rather than trust a commit message at face value.
-- **An initially-planned contribution turned out to already exist in the literature.** Training a detector on PsiloQA and reporting the numbers, our first idea for "going beyond the paper," is precisely the experiment PsiloQA's own Table 4 already runs. We caught this before implementing it by checking the source paper directly, and redirected the contribution toward the actual gap that table leaves open: combined training, which is a harder but genuinely unaddressed question.
+
 - **A validation leak in our own checkpoint-selection setup**, found during our own methodological review rather than by an external reviewer (section 6.5). Not retrained, for cost/time reasons, but disclosed rather than hidden.
 - **Threshold tuning produced a smaller effect than initially hoped.** The headline metric barely moved (+0.11 F1, noise-level). The honest result here is that the paper's default threshold was already close to optimal for this metric, which is a legitimate finding, just not the improvement we set out hoping to report. The compensating positive: this same investigation surfaced a real, different, explainable finding about span-level quality instead.
 - **The combined RAGTruth+PsiloQA training study is not yet executed** as of this report. It is fully scoped (section 7.2 of the literature survey) but pending the next phase of work.

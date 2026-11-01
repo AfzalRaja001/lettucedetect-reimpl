@@ -118,17 +118,71 @@ def example_level_f1(
     return result
 
 
-def run(checkpoint_dir: Path = DEFAULT_CHECKPOINT, threshold: float = 0.5) -> dict:
-    """Run inference over the cached RAGTruth test split and score it.
+def token_level_metrics(gold_seqs: list[list[int]], pred_seqs: list[list[int]]) -> dict:
+    """Micro-averaged token precision/recall/F1 plus mean per-example token IoU.
+
+    Example-level F1 is uninformative on datasets where almost every answer
+    contains a hallucination (PsiloQA), so cross-dataset comparison uses
+    these token-level numbers. IoU is the overlap between gold and predicted
+    hallucinated tokens per example (an example with neither scores 1).
+
+    :param gold_seqs: per-example, per-token gold 0/1 labels
+    :param pred_seqs: per-example, per-token predicted 0/1 labels (same shape)
+    :return: dict with token_precision, token_recall, token_f1, token_iou
+    """
+    tp = fp = fn = 0
+    ious = []
+    for gold_seq, pred_seq in zip(gold_seqs, pred_seqs):
+        gold = np.asarray(gold_seq) == 1
+        pred = np.asarray(pred_seq) == 1
+        tp += int((gold & pred).sum())
+        fp += int((~gold & pred).sum())
+        fn += int((gold & ~pred).sum())
+        union = int((gold | pred).sum())
+        ious.append(1.0 if union == 0 else int((gold & pred).sum()) / union)
+
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+    return {
+        "token_precision": precision,
+        "token_recall": recall,
+        "token_f1": f1,
+        "token_iou": float(np.mean(ious)),
+    }
+
+
+def result_paths(dataset: str, tag: str | None) -> tuple[Path, Path]:
+    """Where metrics and the raw prediction dump go.
+
+    RAGTruth with no tag keeps the original file names, so the committed
+    baseline results stay valid. Anything else is written under a tag.
+    """
+    results_dir = REPO_ROOT / "results"
+    if dataset == "ragtruth" and not tag:
+        return results_dir / "metrics.json", results_dir / "test_predictions.npz"
+    prefix = tag or dataset
+    return results_dir / f"{prefix}_metrics.json", results_dir / f"{prefix}_predictions.npz"
+
+
+def run(
+    checkpoint_dir: Path = DEFAULT_CHECKPOINT,
+    threshold: float = 0.5,
+    dataset: str = "ragtruth",
+    tag: str | None = None,
+) -> dict:
+    """Run inference over one dataset's cached test split and score it.
 
     :param checkpoint_dir: a directory saved by train.py's model.save_pretrained()
     :param threshold: probability above which a token counts as hallucinated
-    :return: the full metrics dict (also written to results/metrics.json)
+    :param dataset: which test split to score: "ragtruth" or "psiloqa"
+    :param tag: name for the output files, e.g. "psiloqa_on_ragtruth"
+    :return: the full metrics dict (also written under results/)
     """
     tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
     model = AutoModelForTokenClassification.from_pretrained(checkpoint_dir)
 
-    test_dataset = load_cached_split("test")
+    test_dataset = load_cached_split("test", dataset=dataset)
     task_types = test_dataset["task_type"]
     source_ids = test_dataset["source_id"]
 
@@ -160,7 +214,7 @@ def run(checkpoint_dir: Path = DEFAULT_CHECKPOINT, threshold: float = 0.5) -> di
     # this checkpoint (threshold sweeps, calibration/ECE, per-task analysis)
     # can be answered offline on any machine, without re-running the model
     # on a GPU. Only answer-token positions are kept, so this stays small.
-    dump_path = REPO_ROOT / "results" / "test_predictions.npz"
+    metrics_path, dump_path = result_paths(dataset, tag)
     dump_path.parent.mkdir(exist_ok=True)
     np.savez_compressed(
         dump_path,
@@ -174,13 +228,13 @@ def run(checkpoint_dir: Path = DEFAULT_CHECKPOINT, threshold: float = 0.5) -> di
     metrics = {}
     metrics.update(example_level_f1(gold_seqs, pred_seqs, group_by=task_types))
     metrics.update(span_level_f1(gold_seqs, pred_seqs))
+    metrics.update(token_level_metrics(gold_seqs, pred_seqs))
     metrics["threshold"] = threshold
     metrics["checkpoint"] = str(checkpoint_dir)
+    metrics["dataset"] = dataset
     metrics["n_test_examples"] = len(gold_seqs)
 
-    results_dir = REPO_ROOT / "results"
-    results_dir.mkdir(exist_ok=True)
-    with open(results_dir / "metrics.json", "w", encoding="utf-8") as f:
+    with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
 
     return metrics
@@ -190,7 +244,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
     parser.add_argument("--threshold", type=float, default=0.5)
+    parser.add_argument("--dataset", choices=["ragtruth", "psiloqa"], default="ragtruth")
+    parser.add_argument("--tag", default=None, help="output file prefix, e.g. psiloqa_on_ragtruth")
     args = parser.parse_args()
 
-    final_metrics = run(args.checkpoint, args.threshold)
+    final_metrics = run(args.checkpoint, args.threshold, args.dataset, args.tag)
     print(json.dumps(final_metrics, indent=2))
