@@ -1,0 +1,48 @@
+{
+  "psiloqa_on_psiloqa": {
+    "dataset": "psiloqa",
+    "n": 1098,
+    "example_positive_rate": 0.9626593806921676,
+    "example_f1": 98.10066476733144,
+    "flag_all_f1": 98.09744779582367,
+    "share_flagged": 0.9553734061930783,
+    "example_auroc": 0.8742414103422019,
+    "auroc_by_task_type": {
+      "PsiloQA": 0.8742414103422019
+    },
+    "token_f1": 76.37912949847305,
+    "token_auroc": 0.7939207717385082
+  },
+  "psiloqa_on_ragtruth": {
+    "dataset": "ragtruth",
+    "n": 2700,
+    "example_positive_rate": 0.34925925925925927,
+    "example_f1": 55.216208043544,
+    "flag_all_f1": 51.77051880318419,
+    "share_flagged": 0.8755555555555555,
+    "example_auroc": 0.7125939508139236,
+    "auroc_by_task_type": {
+      "Data2txt": 0.48782410321803094,
+      "QA": 0.7364738175675676,
+      "Summary": 0.614262874690106
+    },
+    "token_f1": 17.66386344564072,
+    "token_auroc": 0.7538552178135586
+  },
+  "ragtruth_baseline_on_ragtruth": {
+    "dataset": "ragtruth",
+    "n": 2700,
+    "example_positive_rate": 0.34925925925925927,
+    "example_f1": 77.17750826901874,
+    "flag_all_f1": 51.77051880318419,
+    "share_flagged": 0.3225925925925926,
+    "example_auroc": 0.8953454474783791,
+    "auroc_by_task_type": {
+      "Data2txt": 0.8979844936215089,
+      "QA": 0.8954349662162161,
+      "Summary": 0.7754676583276989
+    },
+    "token_f1": 55.373303167420815,
+    "token_auroc": 0.9146564799250876
+  }
+}

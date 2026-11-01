@@ -25,6 +25,7 @@ from transformers import (
 )
 
 from dataset import load_cached_split
+from scoring import example_auroc, token_auroc
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CHECKPOINT = REPO_ROOT / "checkpoints" / "run" / "best"
@@ -229,6 +230,8 @@ def run(
     metrics.update(example_level_f1(gold_seqs, pred_seqs, group_by=task_types))
     metrics.update(span_level_f1(gold_seqs, pred_seqs))
     metrics.update(token_level_metrics(gold_seqs, pred_seqs))
+    metrics.update(example_auroc(prob_seqs, gold_seqs, group_by=task_types))
+    metrics["token_auroc"] = token_auroc(prob_seqs, gold_seqs)
     metrics["threshold"] = threshold
     metrics["checkpoint"] = str(checkpoint_dir)
     metrics["dataset"] = dataset
