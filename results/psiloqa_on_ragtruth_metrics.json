@@ -1,0 +1,36 @@
+{
+  "example_precision": 0.3863732543377063,
+  "example_recall": 0.968186638388123,
+  "example_f1": 0.5523290986085905,
+  "by_task_type": {
+    "Data2txt": {
+      "precision": 0.6438969764837627,
+      "recall": 0.9930915371329879,
+      "f1": 0.78125,
+      "n": 900
+    },
+    "QA": {
+      "precision": 0.22358346094946402,
+      "recall": 0.9125,
+      "f1": 0.3591635916359164,
+      "n": 900
+    },
+    "Summary": {
+      "precision": 0.2350061199510404,
+      "recall": 0.9411764705882353,
+      "f1": 0.376101860920666,
+      "n": 900
+    }
+  },
+  "span_precision": 0.08527912392221033,
+  "span_recall": 0.7725199543899658,
+  "span_f1": 0.15360199512554554,
+  "token_precision": 0.10510488172911397,
+  "token_recall": 0.5543039677202422,
+  "token_f1": 0.1767038856632425,
+  "token_iou": 0.16873487318312638,
+  "threshold": 0.5,
+  "checkpoint": "checkpoints\\psiloqa\\best",
+  "dataset": "ragtruth",
+  "n_test_examples": 2700
+}
