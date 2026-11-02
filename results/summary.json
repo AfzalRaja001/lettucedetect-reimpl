@@ -1,4 +1,34 @@
 {
+  "both_on_psiloqa": {
+    "dataset": "psiloqa",
+    "n": 1098,
+    "example_positive_rate": 0.9626593806921676,
+    "example_f1": 98.01512287334593,
+    "flag_all_f1": 98.09744779582367,
+    "share_flagged": 0.9644808743169399,
+    "example_auroc": 0.889274753674689,
+    "auroc_by_task_type": {
+      "PsiloQA": 0.889274753674689
+    },
+    "token_f1": 77.29358626919603,
+    "token_auroc": 0.7985994361991524
+  },
+  "both_on_ragtruth": {
+    "dataset": "ragtruth",
+    "n": 2700,
+    "example_positive_rate": 0.34925925925925927,
+    "example_f1": 66.62387676508344,
+    "flag_all_f1": 51.77051880318419,
+    "share_flagged": 0.22777777777777777,
+    "example_auroc": 0.8752679027866719,
+    "auroc_by_task_type": {
+      "Data2txt": 0.851199027219559,
+      "QA": 0.8937246621621621,
+      "Summary": 0.7747703966644128
+    },
+    "token_f1": 45.83492694867284,
+    "token_auroc": 0.91329884616619
+  },
   "psiloqa_on_psiloqa": {
     "dataset": "psiloqa",
     "n": 1098,
@@ -28,6 +58,50 @@
     },
     "token_f1": 17.66386344564072,
     "token_auroc": 0.7538552178135586
+  },
+  "ragtruth_on_psiloqa": {
+    "dataset": "psiloqa",
+    "n": 1098,
+    "example_positive_rate": 0.9626593806921676,
+    "example_f1": 96.49207111965401,
+    "flag_all_f1": 98.09744779582367,
+    "share_flagged": 0.9326047358834244,
+    "example_auroc": 0.7991900685326626,
+    "auroc_by_task_type": {
+      "PsiloQA": 0.7991900685326626
+    },
+    "token_f1": 68.91183709799006,
+    "token_auroc": 0.6893510042623738
+  },
+  "ragtruth_val_on_psiloqa": {
+    "dataset": "psiloqa",
+    "n": 1098,
+    "example_positive_rate": 0.9626593806921676,
+    "example_f1": 94.96824621397167,
+    "flag_all_f1": 98.09744779582367,
+    "share_flagged": 0.9016393442622951,
+    "example_auroc": 0.7890486189630108,
+    "auroc_by_task_type": {
+      "PsiloQA": 0.7890486189630108
+    },
+    "token_f1": 68.12215852935363,
+    "token_auroc": 0.6987551193239632
+  },
+  "ragtruth_val_on_ragtruth": {
+    "dataset": "ragtruth",
+    "n": 2700,
+    "example_positive_rate": 0.34925925925925927,
+    "example_f1": 77.0,
+    "flag_all_f1": 51.77051880318419,
+    "share_flagged": 0.3174074074074074,
+    "example_auroc": 0.8955877746399645,
+    "auroc_by_task_type": {
+      "Data2txt": 0.8984741120957285,
+      "QA": 0.8979011824324324,
+      "Summary": 0.7773023720982646
+    },
+    "token_f1": 54.752487879561116,
+    "token_auroc": 0.9170633704437877
   },
   "ragtruth_baseline_on_ragtruth": {
     "dataset": "ragtruth",

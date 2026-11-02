@@ -1,0 +1,29 @@
+{
+  "example_precision": 0.98046875,
+  "example_recall": 0.9498580889309366,
+  "example_f1": 0.9649207111965401,
+  "by_task_type": {
+    "PsiloQA": {
+      "precision": 0.98046875,
+      "recall": 0.9498580889309366,
+      "f1": 0.9649207111965401,
+      "n": 1098
+    }
+  },
+  "span_precision": 0.685260435906908,
+  "span_recall": 0.8758262511803588,
+  "span_f1": 0.7689119170984455,
+  "token_precision": 0.6139019258779738,
+  "token_recall": 0.7852160052992196,
+  "token_f1": 0.689070745420031,
+  "token_iou": 0.47594022514972395,
+  "example_auroc": 0.7992246809885317,
+  "auroc_by_task_type": {
+    "PsiloQA": 0.7992246809885317
+  },
+  "token_auroc": 0.6893483079067745,
+  "threshold": 0.5,
+  "checkpoint": "C:\\Users\\ajjur\\OneDrive\\Desktop\\lettucedetect-reimpl\\checkpoints\\run\\best",
+  "dataset": "psiloqa",
+  "n_test_examples": 1098
+}

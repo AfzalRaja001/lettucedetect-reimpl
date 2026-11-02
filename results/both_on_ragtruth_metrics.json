@@ -1,0 +1,43 @@
+{
+  "example_precision": 0.8439024390243902,
+  "example_recall": 0.5503711558854719,
+  "example_f1": 0.6662387676508345,
+  "by_task_type": {
+    "Data2txt": {
+      "precision": 0.918918918918919,
+      "recall": 0.6459412780656304,
+      "f1": 0.7586206896551724,
+      "n": 900
+    },
+    "QA": {
+      "precision": 0.6644295302013423,
+      "recall": 0.61875,
+      "f1": 0.6407766990291263,
+      "n": 900
+    },
+    "Summary": {
+      "precision": 0.7796610169491526,
+      "recall": 0.22549019607843138,
+      "f1": 0.34980988593155893,
+      "n": 900
+    }
+  },
+  "span_precision": 0.6522988505747126,
+  "span_recall": 0.526071842410197,
+  "span_f1": 0.5824246311738294,
+  "token_precision": 0.7216867469879518,
+  "token_recall": 0.33568706568034073,
+  "token_f1": 0.45823133414932676,
+  "token_iou": 0.7007677918245063,
+  "example_auroc": 0.8752669974548104,
+  "auroc_by_task_type": {
+    "Data2txt": 0.851199027219559,
+    "QA": 0.8937415540540541,
+    "Summary": 0.7747492675231011
+  },
+  "token_auroc": 0.9132987651137514,
+  "threshold": 0.5,
+  "checkpoint": "C:\\Users\\ajjur\\OneDrive\\Desktop\\lettucedetect-reimpl\\checkpoints\\both\\best",
+  "dataset": "ragtruth",
+  "n_test_examples": 2700
+}

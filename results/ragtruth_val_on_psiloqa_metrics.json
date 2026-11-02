@@ -1,0 +1,29 @@
+{
+  "example_precision": 0.9818181818181818,
+  "example_recall": 0.9195837275307474,
+  "example_f1": 0.9496824621397166,
+  "by_task_type": {
+    "PsiloQA": {
+      "precision": 0.9818181818181818,
+      "recall": 0.9195837275307474,
+      "f1": 0.9496824621397166,
+      "n": 1098
+    }
+  },
+  "span_precision": 0.6527855936972425,
+  "span_recall": 0.8715251690458302,
+  "span_f1": 0.7464607464607464,
+  "token_precision": 0.6519057977868155,
+  "token_recall": 0.7133867395309362,
+  "token_f1": 0.6812619843042678,
+  "token_iou": 0.48652215513006924,
+  "example_auroc": 0.7890486189630109,
+  "auroc_by_task_type": {
+    "PsiloQA": 0.7890486189630109
+  },
+  "token_auroc": 0.6987541558595292,
+  "threshold": 0.5,
+  "checkpoint": "C:\\Users\\ajjur\\OneDrive\\Desktop\\lettucedetect-reimpl\\checkpoints\\ragtruth_val\\best",
+  "dataset": "psiloqa",
+  "n_test_examples": 1098
+}
