@@ -171,6 +171,7 @@ def run(
     threshold: float = 0.5,
     dataset: str = "ragtruth",
     tag: str | None = None,
+    eval_batch_size: int = 8,
 ) -> dict:
     """Run inference over one dataset's cached test split and score it.
 
@@ -178,6 +179,7 @@ def run(
     :param threshold: probability above which a token counts as hallucinated
     :param dataset: which test split to score: "ragtruth" or "psiloqa"
     :param tag: name for the output files, e.g. "psiloqa_on_ragtruth"
+    :param eval_batch_size: lower this if a large model runs out of GPU memory
     :return: the full metrics dict (also written under results/)
     """
     tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
@@ -191,7 +193,7 @@ def run(
         model=model,
         args=TrainingArguments(
             output_dir=str(REPO_ROOT / "checkpoints" / "_eval_scratch"),
-            per_device_eval_batch_size=8,
+            per_device_eval_batch_size=eval_batch_size,
             report_to=[],
         ),
         data_collator=DataCollatorForTokenClassification(tokenizer=tokenizer),
@@ -249,7 +251,8 @@ if __name__ == "__main__":
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--dataset", choices=["ragtruth", "psiloqa"], default="ragtruth")
     parser.add_argument("--tag", default=None, help="output file prefix, e.g. psiloqa_on_ragtruth")
+    parser.add_argument("--eval-batch-size", type=int, default=8)
     args = parser.parse_args()
 
-    final_metrics = run(args.checkpoint, args.threshold, args.dataset, args.tag)
+    final_metrics = run(args.checkpoint, args.threshold, args.dataset, args.tag, args.eval_batch_size)
     print(json.dumps(final_metrics, indent=2))

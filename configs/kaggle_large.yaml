@@ -1,0 +1,34 @@
+# ModernBERT-large on a Kaggle T4 (16GB, no bf16 support).
+#
+# Same recipe as base_config.yaml (learning rate, weight decay, epochs, seed,
+# effective batch size of 8, max_seq_length 2048) so the comparison with the
+# base model is about the backbone only. What changes is how it fits in memory:
+#   batch 1 x accumulation 8 = effective batch 8, same as 2 x 4 on the laptop
+#   fp16 instead of bf16, because the T4 has no bf16
+#   gradient checkpointing, which recomputes activations to save memory
+
+paths:
+  raw_data_dir: data/raw
+  processed_data_dir: data/processed
+  checkpoints_dir: checkpoints
+  results_dir: results
+
+model:
+  backbone: answerdotai/ModernBERT-large
+  num_labels: 2
+
+training:
+  optimizer: adamw
+  learning_rate: 1.0e-5
+  weight_decay: 0.01
+  epochs: 6
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  max_seq_length: 2048
+  precision: fp16
+  gradient_checkpointing: true
+  seed: 42
+
+evaluation:
+  metric_for_best_model: token_f1
+  threshold: 0.5

@@ -1,0 +1,32 @@
+# Ettin-68M and Ettin-150M on a Kaggle T4 (16GB, no bf16 support).
+#
+# Same recipe as base_config.yaml (learning rate, weight decay, epochs, seed,
+# batch 2 x accumulation 4, max_seq_length 2048), so the comparison with
+# ModernBERT-base is about the backbone only. The one change is fp16 instead
+# of bf16, because the T4 has no bf16. These models are small enough to fit
+# without gradient checkpointing.
+
+paths:
+  raw_data_dir: data/raw
+  processed_data_dir: data/processed
+  checkpoints_dir: checkpoints
+  results_dir: results
+
+model:
+  backbone: jhu-clsp/ettin-encoder-150m
+  num_labels: 2
+
+training:
+  optimizer: adamw
+  learning_rate: 1.0e-5
+  weight_decay: 0.01
+  epochs: 6
+  batch_size: 2
+  gradient_accumulation_steps: 4
+  max_seq_length: 2048
+  precision: fp16
+  seed: 42
+
+evaluation:
+  metric_for_best_model: token_f1
+  threshold: 0.5

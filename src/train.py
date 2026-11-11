@@ -8,6 +8,9 @@ Writing that loop by hand would just be re-deriving library code.
 """
 
 import argparse
+import json
+import math
+import time
 from pathlib import Path
 
 import numpy as np
@@ -19,11 +22,13 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForTokenClassification,
     Trainer,
+    TrainerCallback,
     TrainingArguments,
 )
+from transformers.trainer_utils import get_last_checkpoint
 
 from dataset import load_cached_split
-from model import MODEL_NAME, build_model
+from model import BACKBONES, build_model
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "base_config.yaml"
@@ -83,7 +88,53 @@ def compute_token_metrics(eval_pred) -> dict:
     }
 
 
-def build_training_arguments(config: dict, output_dir: Path, smoke_test: bool) -> TrainingArguments:
+class StopOnNonFinite(TrainerCallback):
+    """Abort as soon as the logged loss is NaN or infinite.
+
+    fp16 training on older GPUs (T4) can overflow. Without this, a run would
+    keep going for hours producing garbage.
+    """
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        loss = (logs or {}).get("loss")
+        if loss is not None and not math.isfinite(loss):
+            raise RuntimeError(f"training loss is {loss} at step {state.global_step}; aborting")
+
+
+class TimeBudget(TrainerCallback):
+    """Stop cleanly at an epoch boundary if the next epoch would exceed the budget.
+
+    Kaggle kills a session after 12 hours. Stopping between epochs still
+    evaluates and saves the epoch just finished, so the best checkpoint so far
+    is kept instead of losing the whole run.
+    """
+
+    def __init__(self, hours: float):
+        self.budget_seconds = hours * 3600
+        self.start = 0.0
+        self.epoch_start = 0.0
+        self.longest_epoch = 0.0
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        self.start = self.epoch_start = time.time()
+
+    def on_epoch_end(self, args, state, control, **kwargs):
+        now = time.time()
+        self.longest_epoch = max(self.longest_epoch, now - self.epoch_start)
+        self.epoch_start = now
+        if now - self.start + self.longest_epoch > self.budget_seconds:
+            print(f"[time budget] stopping after epoch {state.epoch:.0f}: next epoch would exceed "
+                  f"{self.budget_seconds / 3600:.1f} h", flush=True)
+            control.should_training_stop = True
+
+
+def build_training_arguments(
+    config: dict,
+    output_dir: Path,
+    smoke_test: bool,
+    seed: int | None = None,
+    max_steps: int | None = None,
+) -> TrainingArguments:
     """Translate the YAML config into a transformers TrainingArguments object.
 
     :param config: parsed config from load_config()
@@ -91,6 +142,9 @@ def build_training_arguments(config: dict, output_dir: Path, smoke_test: bool) -
     :param smoke_test: if True, use a tiny, fast configuration instead of the
         real hyperparameters, so this can be run on a CPU dev machine in
         seconds rather than hours
+    :param seed: overrides training.seed from the config when given
+    :param max_steps: if given, run only this many optimizer steps with no
+        evaluation or saving (a memory and stability check, not a real run)
     :return: a TrainingArguments instance
     """
     training = config["training"]
@@ -108,7 +162,7 @@ def build_training_arguments(config: dict, output_dir: Path, smoke_test: bool) -
             report_to=[],
         )
 
-    return TrainingArguments(
+    args = dict(
         output_dir=str(output_dir),
         num_train_epochs=training["epochs"],
         per_device_train_batch_size=training["batch_size"],
@@ -119,15 +173,33 @@ def build_training_arguments(config: dict, output_dir: Path, smoke_test: bool) -
         # bf16 only makes sense with a CUDA GPU that supports it (the RTX
         # 4060 does); on a CPU dev machine this would either error or be a
         # silent no-op, so gate it on what hardware is actually running.
+        # fp16 is for GPUs without bf16 (Kaggle's T4).
         bf16=use_cuda and training["precision"] == "bf16",
+        fp16=use_cuda and training["precision"] == "fp16",
         eval_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
         save_total_limit=2,
         metric_for_best_model=config["evaluation"]["metric_for_best_model"],
-        seed=training["seed"],
+        seed=seed if seed is not None else training["seed"],
+        logging_steps=50,
         report_to=[],
     )
+    # Memory savers for the 395M model; absent from the base config, so the
+    # base recipe is unchanged.
+    if training.get("gradient_checkpointing"):
+        args.update(gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False})
+    if training.get("optim"):
+        args["optim"] = training["optim"]
+    if max_steps:
+        args.update(
+            max_steps=max_steps,
+            eval_strategy="no",
+            save_strategy="no",
+            load_best_model_at_end=False,
+            logging_steps=5,
+        )
+    return TrainingArguments(**args)
 
 
 def load_combined_split(split: str, datasets: list[str], processed_dir: Path):
@@ -141,6 +213,11 @@ def run(
     smoke_test: bool = False,
     train_on: str = "ragtruth",
     run_name: str | None = None,
+    backbone: str = "modernbert-base",
+    seed: int | None = None,
+    max_steps: int | None = None,
+    resume: bool = False,
+    time_budget_hours: float | None = None,
 ) -> None:
     """Load data and model per the config, then fine-tune.
 
@@ -152,16 +229,24 @@ def run(
         names) before committing to a real multi-hour run on the GPU machine
     :param train_on: "ragtruth", "psiloqa", or "both"
     :param run_name: checkpoint folder name under checkpoints/; defaults to train_on
+    :param backbone: key of model.BACKBONES
+    :param seed: overrides the config seed
+    :param max_steps: run only this many optimizer steps on the longest
+        examples, with no evaluation or saving. Tests the worst case for GPU
+        memory and fp16 stability before a long run.
+    :param resume: continue from the newest checkpoint in the run folder, if any
+    :param time_budget_hours: stop at an epoch boundary rather than exceed this
     """
     config = load_config(config_path)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = build_model(MODEL_NAME)
+    model_id = BACKBONES[backbone]
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = build_model(model_id)
 
     datasets = TRAIN_SOURCES[train_on]
     processed_dir = config["paths"]["processed_data_dir"]
     train_dataset = load_combined_split("train", datasets, processed_dir)
     eval_dataset = load_combined_split("val", datasets, processed_dir)
-    print(f"Training on {datasets}: {len(train_dataset)} train / {len(eval_dataset)} val examples")
+    print(f"Training {backbone} on {datasets}: {len(train_dataset)} train / {len(eval_dataset)} val examples")
 
     if smoke_test:
         # Sort by length and take the shortest examples, so the smoke test
@@ -173,10 +258,22 @@ def run(
         eval_dataset = eval_dataset.map(lambda ex: {"length": len(ex["input_ids"])})
         eval_dataset = eval_dataset.sort("length").select(range(10)).remove_columns("length")
 
+    if max_steps:
+        # Longest examples first: if the worst batch fits in memory, so does
+        # every other batch in the real run.
+        needed = max_steps * config["training"]["batch_size"] * config["training"]["gradient_accumulation_steps"]
+        train_dataset = train_dataset.map(lambda ex: {"length": len(ex["input_ids"])})
+        train_dataset = train_dataset.sort("length", reverse=True).select(range(needed)).remove_columns("length")
+        print(f"Memory check: {needed} longest examples, {max_steps} optimizer steps, no saving")
+
     collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
     name = run_name or train_on
     output_dir = config["paths"]["checkpoints_dir"] / (f"smoke_test_{name}" if smoke_test else name)
-    training_args = build_training_arguments(config, output_dir, smoke_test)
+    training_args = build_training_arguments(config, output_dir, smoke_test, seed=seed, max_steps=max_steps)
+
+    callbacks = [StopOnNonFinite()]
+    if time_budget_hours:
+        callbacks.append(TimeBudget(time_budget_hours))
 
     trainer = Trainer(
         model=model,
@@ -185,18 +282,42 @@ def run(
         eval_dataset=eval_dataset,
         data_collator=collator,
         compute_metrics=compute_token_metrics,
+        callbacks=callbacks,
     )
     print("========== DEVICE INFO ==========")
     print("CUDA available:", torch.cuda.is_available())
     print("CUDA device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
     print("Trainer device:", trainer.args.device)
     print("Trainer n_gpu:", trainer.args.n_gpu)
+    print("Precision: bf16=%s fp16=%s" % (training_args.bf16, training_args.fp16))
     print("=================================")
-    trainer.train()
+
+    last_checkpoint = get_last_checkpoint(str(output_dir)) if resume and output_dir.exists() else None
+    if last_checkpoint:
+        print(f"Resuming from {last_checkpoint}")
+    trainer.train(resume_from_checkpoint=last_checkpoint)
+
+    if max_steps:
+        peak = torch.cuda.max_memory_allocated() / 1e9 if torch.cuda.is_available() else 0.0
+        print(f"Memory check passed: peak GPU memory {peak:.1f} GB, loss stayed finite")
+        return
 
     if not smoke_test:
         model.save_pretrained(output_dir / "best")
         tokenizer.save_pretrained(output_dir / "best")
+        run_info = {
+            "backbone": backbone,
+            "model_id": model_id,
+            "train_on": train_on,
+            "seed": training_args.seed,
+            "epochs_completed": trainer.state.epoch,
+            "epochs_planned": config["training"]["epochs"],
+            "best_metric": trainer.state.best_metric,
+            "precision": "bf16" if training_args.bf16 else "fp16" if training_args.fp16 else "fp32",
+            "config": str(config_path),
+        }
+        with open(output_dir / "best" / "run_info.json", "w", encoding="utf-8") as f:
+            json.dump(run_info, f, indent=2)
 
 
 if __name__ == "__main__":
@@ -205,6 +326,11 @@ if __name__ == "__main__":
     parser.add_argument("--smoke-test", action="store_true")
     parser.add_argument("--train-on", choices=sorted(TRAIN_SOURCES), default="ragtruth")
     parser.add_argument("--run-name", default=None, help="checkpoint folder name; defaults to --train-on")
+    parser.add_argument("--backbone", choices=sorted(BACKBONES), default="modernbert-base")
+    parser.add_argument("--seed", type=int, default=None, help="overrides the config seed")
+    parser.add_argument("--max-steps", type=int, default=None, help="memory/stability check on the longest examples")
+    parser.add_argument("--resume", action="store_true", help="continue from the newest checkpoint of this run")
+    parser.add_argument("--time-budget-hours", type=float, default=None, help="stop at an epoch boundary past this")
     args = parser.parse_args()
 
     run(
@@ -212,4 +338,9 @@ if __name__ == "__main__":
         smoke_test=args.smoke_test,
         train_on=args.train_on,
         run_name=args.run_name,
+        backbone=args.backbone,
+        seed=args.seed,
+        max_steps=args.max_steps,
+        resume=args.resume,
+        time_budget_hours=args.time_budget_hours,
     )

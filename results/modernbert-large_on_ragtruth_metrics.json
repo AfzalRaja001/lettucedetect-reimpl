@@ -1,0 +1,43 @@
+{
+  "example_precision": 0.7803108808290156,
+  "example_recall": 0.7985153764581124,
+  "example_f1": 0.789308176100629,
+  "by_task_type": {
+    "Data2txt": {
+      "precision": 0.8703703703703703,
+      "recall": 0.8929188255613126,
+      "f1": 0.8815004262574595,
+      "n": 900
+    },
+    "QA": {
+      "precision": 0.655367231638418,
+      "recall": 0.725,
+      "f1": 0.6884272997032641,
+      "n": 900
+    },
+    "Summary": {
+      "precision": 0.6185567010309279,
+      "recall": 0.5882352941176471,
+      "f1": 0.6030150753768844,
+      "n": 900
+    }
+  },
+  "span_precision": 0.5688323489323035,
+  "span_recall": 0.7624847746650426,
+  "span_f1": 0.6515742909185533,
+  "token_precision": 0.6332229649528331,
+  "token_recall": 0.5680340730777852,
+  "token_f1": 0.5988597087235237,
+  "token_iou": 0.7314586912182297,
+  "example_auroc": 0.9175170247656549,
+  "auroc_by_task_type": {
+    "Data2txt": 0.9085866167363432,
+    "QA": 0.9152618243243242,
+    "Summary": 0.8484195402298851
+  },
+  "token_auroc": 0.9311323857151022,
+  "threshold": 0.5,
+  "checkpoint": "/kaggle/working/repo/checkpoints/modernbert-large/best",
+  "dataset": "ragtruth",
+  "n_test_examples": 2700
+}

@@ -29,6 +29,36 @@
     "token_f1": 45.83492694867284,
     "token_auroc": 0.91329884616619
   },
+  "modernbert-large_on_psiloqa": {
+    "dataset": "psiloqa",
+    "n": 1098,
+    "example_positive_rate": 0.9626593806921676,
+    "example_f1": 97.42366412213741,
+    "flag_all_f1": 98.09744779582367,
+    "share_flagged": 0.9462659380692168,
+    "example_auroc": 0.8075201329118306,
+    "auroc_by_task_type": {
+      "PsiloQA": 0.8075201329118306
+    },
+    "token_f1": 69.36017968590478,
+    "token_auroc": 0.6856840346120785
+  },
+  "modernbert-large_on_ragtruth": {
+    "dataset": "ragtruth",
+    "n": 2700,
+    "example_positive_rate": 0.34925925925925927,
+    "example_f1": 78.93081761006289,
+    "flag_all_f1": 51.77051880318419,
+    "share_flagged": 0.3574074074074074,
+    "example_auroc": 0.9175161194337933,
+    "auroc_by_task_type": {
+      "Data2txt": 0.9086000677933274,
+      "QA": 0.9152702702702702,
+      "Summary": 0.8484371478476447
+    },
+    "token_f1": 59.88420181968569,
+    "token_auroc": 0.9311325653267715
+  },
   "psiloqa_on_psiloqa": {
     "dataset": "psiloqa",
     "n": 1098,

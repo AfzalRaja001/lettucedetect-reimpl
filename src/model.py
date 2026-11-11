@@ -14,6 +14,16 @@ from transformers import AutoModelForTokenClassification, PreTrainedModel
 
 MODEL_NAME = "answerdotai/ModernBERT-base"
 
+# Short names for the backbones we compare. All of them share ModernBERT's
+# tokenizer (checked: identical vocabulary and identical ids on a sample pair),
+# so the cached data in data/processed is valid for every one of them.
+BACKBONES = {
+    "modernbert-base": "answerdotai/ModernBERT-base",
+    "modernbert-large": "answerdotai/ModernBERT-large",
+    "ettin-68m": "jhu-clsp/ettin-encoder-68m",
+    "ettin-150m": "jhu-clsp/ettin-encoder-150m",
+}
+
 # Attaching human-readable names to the two classes is optional, but it means
 # a saved checkpoint's config.json records what "0" and "1" mean, so loading
 # it later (or in a different script, or a year from now) doesn't require

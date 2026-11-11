@@ -1,0 +1,15 @@
+{
+  "id": "USERNAME/lettucedetect-modernbert-large",
+  "title": "lettucedetect modernbert large",
+  "code_file": "train_large.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": ["USERNAME/lettucedetect-repo"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
